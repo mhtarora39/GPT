@@ -21,9 +21,14 @@ if __name__ == "__main__":
         text = f.read()
 
     tokenizer = Tokenizer(text)
-    tensor = tokenizer.encode("Hi This Is Mohit")
+   
+
+    print("=======ENCODED TEXT======")
+    tensor = tokenizer.encode(text)
     print(tensor)
+    print("=======DECODED TEXT======")
     print(tokenizer.decode(tensor))
+
 
 
 
