@@ -4,11 +4,14 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from tokenizer import Tokenizer
-Batch = 4
+from dataloader import DataLoader
 
-class BigramLanguageModel(nn.Model):
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
+print(f"Running on {device}")
+class BigramLanguageModel(nn.Module):
 
     def __init__(self,vocab_size):
+        super().__init__()
         self.embeddings = nn.Embedding(vocab_size,vocab_size)
 
     def forward(self,index,target=None):
@@ -24,10 +27,10 @@ class BigramLanguageModel(nn.Model):
     
     def generate(self,idx,num_sample):
         for _ in range(num_sample):
-            logits = self(idx) #B , T , C
+            logits , loss = self(idx) #B , T , C
             last_sample = logits[:,-1,:]
             last_sample_prob = F.softmax(last_sample,dim=1)
-            idx_next =  torch.multinomial(last_sample_prob,dim=1)
+            idx_next =  torch.multinomial(last_sample_prob,num_samples=1)
             idx = torch.cat([idx,idx_next])
         return idx
 
@@ -38,21 +41,13 @@ class BigramLanguageModel(nn.Model):
 
 
 if __name__ == "__main__":
+    data_loader = DataLoader('./input.txt',4)
 
-    with open("./input.txt",'r',encoding='utf-8') as f:
-        text = f.read()
-
-    tokenizer = Tokenizer(text)
-    tensor = torch.tensor(tokenizer.encode(text),dtype = torch.long)
-    train_len = int(tensor.size().numel()*0.9)
-    train_tensor = tensor[:train_len]
-    val_tensor = tensor[train_len:]
-
-    print("Below representation how data is formatted")
-    train_data = train_tensor[:BLOCK_SIZE]
-    target_data = train_tensor[1:BLOCK_SIZE+1]
-    for i in range(BLOCK_SIZE):
-        print(f"training data {train_data[:i+1]} target data is {target_data[i]}")
-
+    model = BigramLanguageModel(data_loader.vocab_size)
+    x, y  = data_loader.get_batch('train')
+    logits, loss = model(x)
+    print(logits.shape)
+    print(loss)
+    print(data_loader.tokenizer.decode(model.generate(idx = torch.zeros((1, 1), dtype=torch.long), num_sample=100)[0].tolist()))
 
 

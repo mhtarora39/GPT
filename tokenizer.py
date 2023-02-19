@@ -15,6 +15,7 @@ class Tokenizer():
     def decode(self,seq,dtype=torch.long):
         return "".join([self.itos[x] for x in seq])
     
+    
 
 if __name__ == "__main__":
     with open("./input.txt",'r',encoding='utf-8') as f:
