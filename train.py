@@ -41,13 +41,15 @@ class BigramLanguageModel(nn.Module):
 
 
 if __name__ == "__main__":
-    data_loader = DataLoader('./input.txt',4)
+    data_loader = DataLoader('./input.txt',1)
 
     model = BigramLanguageModel(data_loader.vocab_size)
-    x, y  = data_loader.get_batch('train')
+    model = model.to(device)
+    x, y  = data_loader.get_batch('train',device)
+
     logits, loss = model(x)
     print(logits.shape)
     print(loss)
-    print(data_loader.tokenizer.decode(model.generate(idx = torch.zeros((1, 1), dtype=torch.long), num_sample=100)[0].tolist()))
+    print(data_loader.tokenizer.decode(model.generate(idx = torch.zeros((1, 1), dtype=torch.long,device=device), num_sample=100)[0].tolist()))
 
 

@@ -15,13 +15,13 @@ class DataLoader:
         self.batch = batch
         
 
-    def get_batch(self,split):
+    def get_batch(self,split,device='cpu'):
         # generate a small batch of data of inputs x and targets y
         data = self.train_data if split == 'train' else self.val_data
         ix = torch.randint(len(data) - BLOCK_SIZE, (self.batch,))
         x = torch.stack([data[i:i+BLOCK_SIZE] for i in ix])
         y = torch.stack([data[i+1:i+BLOCK_SIZE+1] for i in ix])
-        return x, y
+        return x.to(device), y.to(device)
     
     def get_vocab_size(self):
         return self.vocab_size
