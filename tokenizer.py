@@ -4,6 +4,8 @@ class Tokenizer():
     def __init__(self,text) -> None:
         self.trained_text =  text
         unique_ch = sorted(list(set(text)))
+        print("".join(unique_ch))
+        print(len(unique_ch))
         self.stoi = {ch : i  for i,ch in enumerate(unique_ch)}
         self.itos = {i : ch  for i,ch in enumerate(unique_ch)}
 
@@ -24,11 +26,11 @@ if __name__ == "__main__":
     tokenizer = Tokenizer(text)
    
 
-    print("=======ENCODED TEXT======")
-    tensor = tokenizer.encode(text)
-    print(tensor)
-    print("=======DECODED TEXT======")
-    print(tokenizer.decode(tensor))
+    # print("=======ENCODED TEXT======")
+    # tensor = tokenizer.encode(text)
+    # print(tensor)
+    # print("=======DECODED TEXT======")
+    # print(tokenizer.decode(tensor))
 
 
 

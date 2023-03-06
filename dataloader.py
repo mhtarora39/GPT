@@ -25,4 +25,3 @@ class DataLoader:
     
     def get_vocab_size(self):
         return self.vocab_size
-    
