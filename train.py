@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from tokenizer import Tokenizer
-from dataloader import DataLoader
+from dataloader import DataLoader , BLOCK_SIZE
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 print(f"Running on {device}")
@@ -13,11 +13,15 @@ torch.manual_seed(1337)
 
 class BigramLanguageModel(nn.Module):
 
-    def __init__(self,data_loader):
+    def __init__(self,data_loader,n_embd=32):
         super().__init__()
         self.data_loader = data_loader
         self.vocab_size  = data_loader.vocab_size
-        self.embeddings = nn.Embedding(self.vocab_size,self.vocab_size)
+        self.n_embd      = n_embd
+        self.embeddings    = nn.Embedding(self.vocab_size,self.n_embd)
+        self.pos_embedding = nn.Embedding(BLOCK_SIZE,self.n_embd) 
+        self.lm_head     = nn.Linear(self.n_embd,self.vocab_size)
+
 
     @torch.no_grad()
     def estimate_loss(self,eval_iters):
@@ -34,7 +38,13 @@ class BigramLanguageModel(nn.Module):
         return out     
 
     def forward(self,index,target=None):
-        logits  = self.embeddings(index) #B,T,C
+        B,T           = index.shape
+        ## Mapping each token id to token embeddings
+        tok_embd      = self.embeddings(index) #B,T,C
+        ## Each location (0,t-1) feeds into and there spacial arrangement will be captured.
+        pos_embedding = self.pos_embedding(torch.arange(T,device=device)) #TXC
+        final_embedding = pos_embedding + tok_embd
+        logits    = self.lm_head(final_embedding)   
         loss    = None
 
         if target is not None:
