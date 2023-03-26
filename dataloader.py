@@ -1,6 +1,6 @@
 import torch
 from tokenizer import Tokenizer
-BLOCK_SIZE = 8
+BLOCK_SIZE = 256
 
 class DataLoader:
     def __init__(self, file_path, batch=1,split=0.9) -> None:
@@ -18,9 +18,10 @@ class DataLoader:
     def get_batch(self,split,device='cpu'):
         # generate a small batch of data of inputs x and targets y
         data = self.train_data if split == 'train' else self.val_data
-        ix = torch.randint(len(data) - BLOCK_SIZE, (self.batch,))
+        ix = torch.randint(len(data) - (BLOCK_SIZE+1), (self.batch,))
         x = torch.stack([data[i:i+BLOCK_SIZE] for i in ix])
         y = torch.stack([data[i+1:i+BLOCK_SIZE+1] for i in ix])
+
         return x.to(device), y.to(device)
     
     def get_vocab_size(self):
