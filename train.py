@@ -162,7 +162,7 @@ if __name__ == "__main__":
         optimizer.step()
         if i%1000 == 0:
             print(model.estimate_loss(100))
-    import pdb;pdb.set_trace()
+    torch.onnx.export(model, x, "GPTNANO", verbose=True, input_names=["input"],output_names=["Logits"]) 
     # logits, loss = model(x)
     # print(logits.shape)
     # print(loss)
