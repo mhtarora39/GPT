@@ -71,10 +71,6 @@ class MultiHeadBlock(nn.Module):
         x = x + self.multi_head(self.lm_sa(x))
         x = x + self.ff(self.lm_ff(x))
         return x
-         
-        
-
-        
 
 class BigramLanguageModel(nn.Module):
 
@@ -127,7 +123,7 @@ class BigramLanguageModel(nn.Module):
         # print(final_embedding.shape)
         final_embedding = self.multi_head(final_embedding)
         final_embedding = self.ln_head(final_embedding)
-        final_embedding = self.drop_out(final_embedding)
+        #final_embedding = self.drop_out(final_embedding)
 
         logits    = self.lm_head(final_embedding)   
         loss      = None
@@ -148,22 +144,16 @@ class BigramLanguageModel(nn.Module):
             idx = torch.cat([idx,idx_next],dim=1)
         return idx
 
-
-    
-
-
-
-
 if __name__ == "__main__":
-    data_loader = DataLoader('./input.txt',8)
+    data_loader = DataLoader('./input.txt',32)
 
     model = BigramLanguageModel(data_loader)
     model = model.to(device)
     
-    optimizer = torch.optim.AdamW(model.parameters(),lr=1e-3)
+    optimizer = torch.optim.AdamW(model.parameters(),lr=3e-4)
     
     
-    train_iter = 10000
+    train_iter = 15000
     for i in range(train_iter):
         x, y  = data_loader.get_batch('train',device)
         logits, loss = model(x,y)
@@ -172,7 +162,7 @@ if __name__ == "__main__":
         optimizer.step()
         if i%1000 == 0:
             print(model.estimate_loss(100))
-    
+    import pdb;pdb.set_trace()
     # logits, loss = model(x)
     # print(logits.shape)
     # print(loss)
