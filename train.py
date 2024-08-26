@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from tokenizer import Tokenizer
-from dataloader import DataLoader , BLOCK_SIZE
+from dataloader import DataLoader , BLOCK_SIZE, BATCH_SIZE
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 print(f"Running on {device}")
@@ -12,6 +12,7 @@ torch.manual_seed(1337)
 dropout = 0.2
 num_head=6
 block_layer_size=6
+
 
 class Head(nn.Module):
     def __init__(self,n_embed,head_size):
@@ -21,19 +22,29 @@ class Head(nn.Module):
         self.query = nn.Linear(n_embed,head_size,bias=False)
         self.value = nn.Linear(n_embed,head_size,bias=False)
         self.register_buffer('trill',torch.tril(torch.ones(BLOCK_SIZE,BLOCK_SIZE)))
+        self.k_cache = torch.zeros((BATCH_SIZE, BLOCK_SIZE,head_size))
+        self.v_cache = torch.zeros((BATCH_SIZE, BLOCK_SIZE,head_size))
         self.dropout = nn.Dropout(dropout)
 
-    def forward(self,x):
+    def forward(self,x,pos):
         B,T,C = x.shape
         #print(x.shape)
-        key = self.key(x)
+        k_proj = self.key(x)
         query = self.query(x)
+        v_proj = self.value(x)
+        
+        
+        self.k_cache[:,pos:pos+1,] = k_proj
+        self.v_cache[:,pos:pos+1,] = v_proj
+        
+        key = self.k_cache[:,max(0, pos - BLOCK_SIZE +1) :pos+1]
+        value = self.v_cache[:,max(0, pos - BLOCK_SIZE +1) :pos+1]
         weight = query@key.transpose(-2,-1) + C**-0.5
         weight = weight.masked_fill(self.trill[:T, :T] ==0 ,float('-inf'))
         weight = F.softmax(weight,dim=-1)
         weight = self.dropout(weight)
-        v = self.value(x)
-        out = weight @ v
+        
+        out = weight @ value
         return out
 
 class MULTI_HEAD(nn.Module):
@@ -44,8 +55,8 @@ class MULTI_HEAD(nn.Module):
         self.proj  = nn.Linear(n_embed,n_embed)
         self.dropout = nn.Dropout(dropout)
 
-    def forward(self,x):
-        x = torch.cat([h(x) for h in self.heads],dim = -1)
+    def forward(self,x,pos):
+        x = torch.cat([h(x,pos) for h in self.heads],dim = -1)
         return self.dropout(self.proj(x))
         
 class FeedForward(nn.Module):
@@ -67,8 +78,8 @@ class MultiHeadBlock(nn.Module):
         self.lm_sa = nn.LayerNorm(embed_size)
         self.lm_ff = nn.LayerNorm(embed_size)
     
-    def forward(self,x):
-        x = x + self.multi_head(self.lm_sa(x))
+    def forward(self,x, pos):
+        x = x + self.multi_head(self.lm_sa(x),pos)
         x = x + self.ff(self.lm_ff(x))
         return x
 
@@ -88,10 +99,9 @@ class BigramLanguageModel(nn.Module):
         # Take the embedding and change it vocab size vector 
         self.lm_head      = nn.Linear(self.n_embd,self.vocab_size)
         # Mask softmax head
-        self.multi_head    = nn.Sequential(*[MultiHeadBlock(n_embd,n_embd//num_head,num_head) for _ in range(block_layer_size)])
+        self.multi_head    = [MultiHeadBlock(n_embd,n_embd//num_head,num_head) for _ in range(block_layer_size)]
         self.ln_head       = nn.LayerNorm(n_embd)
         self.drop_out      = nn.Dropout(dropout)
-
 
     @torch.no_grad()
     def estimate_loss(self,eval_iters):
@@ -107,7 +117,7 @@ class BigramLanguageModel(nn.Module):
         self.train()
         return out     
 
-    def forward(self,index,target=None):
+    def forward(self,index,pos,target=None):
         # Here T is time and B is Batch
         # pytorch forward method changing inputs
         # if len(index) == 1:
@@ -121,13 +131,13 @@ class BigramLanguageModel(nn.Module):
         pos_embedding = self.pos_embedding(torch.arange(T,device=device)) #TXC
         final_embedding = pos_embedding + tok_embd
         # print(final_embedding.shape)
-        final_embedding = self.multi_head(final_embedding)
+        for mh in self.multi_head:
+            final_embedding = mh(final_embedding,pos)
         final_embedding = self.ln_head(final_embedding)
         #final_embedding = self.drop_out(final_embedding)
 
         logits    = self.lm_head(final_embedding)   
         loss      = None
-
         if target is not None:
             B,T,C   = logits.shape
             target  = target.view(B*T)
@@ -136,16 +146,19 @@ class BigramLanguageModel(nn.Module):
         return logits ,  loss
     
     def generate(self,idx,num_sample):
-        for _ in range(num_sample):
-            logits , _ = self(idx[:,-BLOCK_SIZE:]) #B , T , C
-            last_sample = logits[:,-1,:] # B,C
+        for pos in range(num_sample):
+            logits , _ = self(idx[:,-1:],pos) #B , T , C
+            last_sample = logits[:,0,:]# B,C
             last_sample_prob = F.softmax(last_sample,dim=-1) # B,C
             idx_next =  torch.multinomial(last_sample_prob,num_samples=1) #B,1
             idx = torch.cat([idx,idx_next],dim=1)
         return idx
 
+
+
+
 if __name__ == "__main__":
-    data_loader = DataLoader('./input.txt',32)
+    data_loader = DataLoader('./input.txt',2)
 
     model = BigramLanguageModel(data_loader)
     model = model.to(device)
@@ -154,18 +167,18 @@ if __name__ == "__main__":
     
     
     train_iter = 15000
+    torch.autograd.set_detect_anomaly(True)
     for i in range(train_iter):
         x, y  = data_loader.get_batch('train',device)
-        logits, loss = model(x,y)
+        for i in range(BLOCK_SIZE):
+            logits, loss = model(x[:,i:i+1],i,y[:,i:i+1])
         optimizer.zero_grad(set_to_none=True)
         loss.backward()
         optimizer.step()
         if i%1000 == 0:
             print(model.estimate_loss(100))
-    torch.onnx.export(model, x, "GPTNANO", verbose=True, input_names=["input"],output_names=["Logits"]) 
-    # logits, loss = model(x)
-    # print(logits.shape)
-    # print(loss)
+   
+    # # logits, loss = model(x)
+    # # print(logits.shape)
+    # # print(loss)
     print(data_loader.tokenizer.decode(model.generate(idx = torch.zeros((1, 1), dtype=torch.long,device=device), num_sample=100)[0].tolist()))
-
-
